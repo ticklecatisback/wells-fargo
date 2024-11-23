@@ -10,6 +10,9 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from authlib.integrations.starlette_client import OAuth
+from starlette.config import Config
+from starlette.middleware.sessions import SessionMiddleware
 
 from database import get_db, engine, Base
 from models import User, CreditCard, Transaction
@@ -42,6 +45,23 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
+# Initialize OAuth
+config = Config('.env')
+oauth = OAuth(config)
+
+# Configure ChatGPT OAuth
+oauth.register(
+    name='chatgpt',
+    client_id=os.getenv('CHATGPT_CLIENT_ID'),
+    client_secret=os.getenv('CHATGPT_CLIENT_SECRET'),
+    authorize_url=os.getenv('CHATGPT_AUTH_URL'),
+    authorize_params=None,
+    token_url=os.getenv('CHATGPT_TOKEN_URL'),
+    token_params=None,
+    api_base_url='https://api.openai.com/v1/',
+    client_kwargs={'scope': os.getenv('CHATGPT_SCOPE', 'openid profile email')}
+)
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Credit Card Tracking API",
@@ -57,6 +77,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add session middleware for OAuth
+app.add_middleware(SessionMiddleware, secret_key=os.getenv('JWT_SECRET_KEY'))
 
 # Rate limiting
 limiter = Limiter(key_func=get_remote_address)
@@ -204,6 +227,27 @@ async def wells_fargo_login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Failed to login to Wells Fargo"
+        )
+
+# ChatGPT OAuth endpoints
+@app.get('/login/chatgpt')
+async def chatgpt_login(request: Request):
+    """Initiate ChatGPT OAuth login flow"""
+    redirect_uri = request.url_for('chatgpt_auth')
+    return await oauth.chatgpt.authorize_redirect(request, redirect_uri)
+
+@app.get('/auth/chatgpt')
+async def chatgpt_auth(request: Request):
+    """Handle ChatGPT OAuth callback"""
+    try:
+        token = await oauth.chatgpt.authorize_access_token(request)
+        user = await oauth.chatgpt.parse_id_token(request, token)
+        request.session['chatgpt_token'] = token
+        return {"message": "Successfully authenticated with ChatGPT", "user": user}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Failed to authenticate with ChatGPT: {str(e)}"
         )
 
 # Card endpoints
