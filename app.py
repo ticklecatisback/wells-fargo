@@ -91,17 +91,24 @@ app.state.limiter = limiter
 
 # Wells Fargo API configuration
 class WellsFargoAPI:
-    BASE_URL = config['WELLS_FARGO_API_BASE_URL']
+    BASE_URL = "https://api-sandbox.wellsfargo.com/api/v1"
     
     @staticmethod
     async def login(username: str, password: str) -> dict:
         """Login to Wells Fargo and get access token"""
         try:
-            url = f"{WellsFargoAPI.BASE_URL}/login"
-            response = requests.post(url, json={
+            url = f"{WellsFargoAPI.BASE_URL}/oauth2/token"
+            headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": f"Basic {os.getenv('WELLS_FARGO_CLIENT_ID')}:{os.getenv('WELLS_FARGO_CLIENT_SECRET')}"
+            }
+            data = {
+                "grant_type": "password",
                 "username": username,
-                "password": password
-            })
+                "password": password,
+                "scope": "accounts cards transactions"
+            }
+            response = requests.post(url, headers=headers, data=data)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -115,8 +122,11 @@ class WellsFargoAPI:
     async def get_credit_cards(access_token: str) -> List[dict]:
         """Get all credit cards from Wells Fargo"""
         try:
-            url = f"{WellsFargoAPI.BASE_URL}/credit-cards"
-            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"{WellsFargoAPI.BASE_URL}/accounts/credit-cards"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json"
+            }
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             return response.json()
@@ -136,13 +146,16 @@ class WellsFargoAPI:
     ) -> List[dict]:
         """Get transactions for a specific card"""
         try:
-            url = f"{WellsFargoAPI.BASE_URL}/credit-cards/{card_id}/transactions"
-            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"{WellsFargoAPI.BASE_URL}/accounts/credit-cards/{card_id}/transactions"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json"
+            }
             params = {}
             if start_date:
-                params["startDate"] = start_date.isoformat()
+                params["fromDate"] = start_date.strftime("%Y-%m-%d")
             if end_date:
-                params["endDate"] = end_date.isoformat()
+                params["toDate"] = end_date.strftime("%Y-%m-%d")
             
             response = requests.get(url, headers=headers, params=params)
             response.raise_for_status()
