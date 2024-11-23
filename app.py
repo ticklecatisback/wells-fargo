@@ -46,14 +46,18 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Initialize OAuth
-config = Config('.env')
-oauth = OAuth(config)
+config = {
+    'WELLS_FARGO_API_BASE_URL': os.getenv('WELLS_FARGO_API_BASE_URL'),
+    'CHATGPT_CLIENT_ID': os.getenv('CHATGPT_CLIENT_ID'),
+    'CHATGPT_CLIENT_SECRET': os.getenv('CHATGPT_CLIENT_SECRET')
+}
+oauth = OAuth()
 
 # Configure ChatGPT OAuth
 oauth.register(
     name='chatgpt',
-    client_id=os.getenv('CHATGPT_CLIENT_ID'),
-    client_secret=os.getenv('CHATGPT_CLIENT_SECRET'),
+    client_id=config['CHATGPT_CLIENT_ID'],
+    client_secret=config['CHATGPT_CLIENT_SECRET'],
     authorize_url=os.getenv('CHATGPT_AUTH_URL'),
     authorize_params=None,
     token_url=os.getenv('CHATGPT_TOKEN_URL'),
@@ -87,7 +91,7 @@ app.state.limiter = limiter
 
 # Wells Fargo API configuration
 class WellsFargoAPI:
-    BASE_URL = os.getenv("WELLS_FARGO_API_BASE_URL")
+    BASE_URL = config['WELLS_FARGO_API_BASE_URL']
     
     @staticmethod
     async def login(username: str, password: str) -> dict:
